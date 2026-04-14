@@ -1,0 +1,19 @@
+# Build outputs
+demonsearch
+*.o
+*.d
+
+# Debug
+*.swp
+*.swo
+*~
+.gdb_history
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
