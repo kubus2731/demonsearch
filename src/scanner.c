@@ -62,7 +62,11 @@ static int scan_dir_recursive(const char *dir_path,
 	}
 
 	if (access(dir_path, R_OK | X_OK) != 0) {
-		stats->skipped_perm++;
+		if (errno == EACCES) {
+			stats->skipped_perm++;
+			return 0;
+		}
+		stats->errors++;
 		return 0;
 	}
 
@@ -109,16 +113,20 @@ static int scan_dir_recursive(const char *dir_path,
 		}
 
 		if (access(full_path, R_OK) != 0) {
-					stats->skipped_perm++;
-					free(full_path);
-					continue;
+			if (errno == EACCES) {
+				stats->skipped_perm++;
+			} else {
+				stats->errors++;
+			}
+			free(full_path);
+			continue;
         }
 
 		stats->visited_entries++;
 		is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
 
 		int matched = ds_match_contains(entry->d_name, pattern);
-		//ds_log_verbose_compare(full_path, pattern, matched);
+		ds_log_verbose_compare(full_path, pattern, matched);
 
 		if (matched) {
 			stats->matches++;
