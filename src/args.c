@@ -115,6 +115,12 @@ int ds_args_parse(int argc, char **argv, ds_args_t *out, bool *out_show_usage)
             verbose = true;
             break;
         case 'd':
+            if (dir != NULL) {
+                fprintf(stderr, "Error: --dir option specified multiple times.\n");
+                fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
+                free(dir);
+                return 2;
+            }
             dir = strdup(optarg);
             if (!dir) {
                 perror("Error: strdup failed");
