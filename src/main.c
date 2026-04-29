@@ -19,9 +19,7 @@ int main(int argc, char *argv[])
     const char *target_dir;
     size_t i;
     char resolved_dir[PATH_MAX];
-    const char *raw_dir;
     ds_proc_table_t ptable;
-
 
     /* Parsowanie i walidacja argumentów wejściowych. */
     if (ds_args_parse(argc, argv, &args, &show_usage) != 0) {
@@ -31,12 +29,11 @@ int main(int argc, char *argv[])
         }
         return EXIT_FAILURE;
     }
-    raw_dir = args.start_dir ? args.start_dir : "/";
 
     /* Zbudowanie absolutnej ścieżki. Wywoływane przed demonizacją, 
        aby upewnić się, że ścieżki względne są poprawnie rozwiązywane. */
-    if (realpath(raw_dir, resolved_dir) == NULL) {
-        fprintf(stderr, "Error: Cannot resolve directory '%s'\n", raw_dir);
+    if (realpath(args.start_dir, resolved_dir) == NULL) {
+        fprintf(stderr, "Error: Cannot resolve directory '%s'\n", args.start_dir);
         ds_args_free(&args);
         return EXIT_FAILURE;
     }

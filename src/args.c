@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 /* Bezpieczna konwersja ciągu znaków na liczbę całkowitą bez znaku.
    Odrzuca wartości ujemne, zera, liczby przekraczające UINT_MAX oraz niepoprawne ciągi.
@@ -14,7 +15,7 @@ static int parse_uint(const char *s, unsigned *out)
     char *end = NULL;
     unsigned long v;
 
-    if (s == NULL || *s == '\0' || *s == '-') {
+    if (s == NULL || *s == '\0' || strchr(s, '-') != NULL) {
         return -1;
     }
 
@@ -103,7 +104,7 @@ int ds_args_parse(int argc, char **argv, ds_args_t *out, bool *out_show_usage)
     optind = 1; /* Reset globalnego stanu dla getopt */
 
     /* Ekstrakcja i walidacja flag opcjonalnych oraz ich argumentów */
-    while ((opt = getopt_long(argc, argv, "hvt:i:d:", long_opts, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, ":hvt:i:d:", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'h':
             show_usage = true;
@@ -127,15 +128,30 @@ int ds_args_parse(int argc, char **argv, ds_args_t *out, bool *out_show_usage)
         case 't':
         case 'i':
             if (parse_uint(optarg, &interval) != 0) {
-                fprintf(stderr, "Error: invalid value for interval/time: '%s'. Must be a positive integer.\n", optarg ? optarg : "");
+                fprintf(stderr, "Error: Invalid value for interval/time: '%s'. Must be a positive integer.\n", optarg ? optarg : "");
                 fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
                 free(dir);
                 return 2;
             }
             break;
+        case ':':
+            /* Brak argumentu dla opcji. */
+            fprintf(stderr, "Error: Option '-%c' requires an argument.\n", optopt);
+            fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
+            free(dir);
+            return 2;
         case '?':
+            /* Nieznana opcja. */
+            if (isprint(optopt)) {
+                fprintf(stderr, "Error: Unrecognized option '-%c'.\n", optopt);
+            } else {
+                fprintf(stderr, "Error: Unrecognized option character '\\x%x'.\n", optopt);
+            }
+            fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
+            free(dir);
+            return 2;
         default:
-            fprintf(stderr, "Error: unrecognized option or missing argument.\n");
+            fprintf(stderr, "Error: Argument parsing failed.\n");
             fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
             free(dir);
             return 2;
@@ -158,7 +174,14 @@ int ds_args_parse(int argc, char **argv, ds_args_t *out, bool *out_show_usage)
 
     tmp.interval_sec = interval;
     tmp.verbose = verbose;
-    tmp.start_dir = dir;
+
+    /* Ustawienie katalogu startowego.
+       Jeśli nie został podany, użyj root '/' jako domyślnego katalogu. */
+    tmp.start_dir = dir ? dir : strdup("/");
+    if (tmp.start_dir == NULL) {
+        perror("Error: strdup failed for default directory");
+        return 2;
+    }
     tmp.pattern_count = (size_t)(argc - optind); /* Liczba wzorców to pozostałe argumenty po opcjach. */
     tmp.patterns = (char **)calloc(tmp.pattern_count, sizeof(char *));
     
