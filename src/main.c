@@ -1,5 +1,3 @@
-/* Punkt startowy: bootstrap modulow i glowna petla demona. */
-
 #include "args.h"
 #include "daemonize.h"
 #include "logger.h"

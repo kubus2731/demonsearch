@@ -1,5 +1,3 @@
-/* Modul: pomocnicze funkcje dopasowania fragmentu nazwy pliku. */
-
 #ifndef DEMONSEARCH_MATCH_H
 #define DEMONSEARCH_MATCH_H
 
@@ -7,10 +5,10 @@
 #include <stddef.h>
 
 /*
- * Porównuje ciąg znaków candidate z pattern.
- * 
- * Zwraca true, jeśli candidate zawiera pattern jako podciąg, false w przeciwnym razie.
- * Jeśli candidate lub pattern jest NULL, lub pattern jest pusty, zwraca false.
+ * Sprawdza, czy ciąg znaków zawiera dany jako podciąg.
+ 
+ * Zwraca true jeśli candidate zawiera pattern jako podciąg,
+ * false w przypadku braku dopasowania lub błędnych parametrów.
  */
 bool ds_match_contains(const char *candidate, const char *pattern);
 

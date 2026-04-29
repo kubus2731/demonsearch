@@ -1,5 +1,3 @@
-/* Implementacja modulu: parsowanie CLI do konfiguracji runtime. */
-
 #include "args.h"
 #include <errno.h>
 #include <getopt.h>
@@ -8,9 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-/*
- * Parsuje string do unsigned, zwracając 0 w przypadku sukcesu, lub -1 przy błędzie.
- */
+/* Bezpieczna konwersja ciągu znaków na liczbę całkowitą bez znaku.
+   Odrzuca wartości ujemne, zera, liczby przekraczające UINT_MAX oraz niepoprawne ciągi.
+   Zwraca 0 w przypadku sukcesu, lub -1 przy błędzie. */
 static int parse_uint(const char *s, unsigned *out)
 {
     char *end = NULL;
@@ -87,7 +85,7 @@ int ds_args_parse(int argc, char **argv, ds_args_t *out, bool *out_show_usage)
     char *dir = NULL;
     int i;
     
-    /* Definicja długich opcji dla getopt_long */
+    /* Mapowanie długich i krótkich flag CLI */
     static const struct option long_opts[] = {
         {"help",     no_argument,       NULL, 'h'},
         {"verbose",  no_argument,       NULL, 'v'},
@@ -104,8 +102,7 @@ int ds_args_parse(int argc, char **argv, ds_args_t *out, bool *out_show_usage)
     opterr = 0;
     optind = 1; /* Reset globalnego stanu dla getopt */
 
-    /*  Przetwarzanie flag konfiguracyjnych za pomocą getopt_long 
-        Znak ':' po literze oznacza, że opcja wymaga argumentu. */
+    /* Ekstrakcja i walidacja flag opcjonalnych oraz ich argumentów */
     while ((opt = getopt_long(argc, argv, "hvt:i:d:", long_opts, NULL)) != -1) {
         switch (opt) {
         case 'h':
@@ -151,6 +148,7 @@ int ds_args_parse(int argc, char **argv, ds_args_t *out, bool *out_show_usage)
         return 1;
     }
 
+    /* Walidacja obecności co najmniej jednego wzorca do wyszukania */
     if (optind >= argc) {
         fprintf(stderr, "Error: at least one search pattern must be provided.\n");
         fprintf(stderr, "Try '%s --help' for more information.\n", argv[0]);
@@ -170,6 +168,7 @@ int ds_args_parse(int argc, char **argv, ds_args_t *out, bool *out_show_usage)
         return 2;
     }
 
+    /* Budowanie wejściowej tablicy wzorców, walidując każdy z nich jako niepusty ciąg znaków */
     for (i = 0; i < (int)tmp.pattern_count; i++) {
         const char *src = argv[optind + i];
         if (src == NULL || *src == '\0') {

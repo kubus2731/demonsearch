@@ -1,10 +1,10 @@
-/* Implementacja modulu: handlery sygnalow i flagi sterowania skanem. */
-
 #include "signals.h"
 
 #include <signal.h>
 #include <stddef.h>
 
+/* Zmienne globalne przechowujące informacje o zakolejkowanych 
+   żądaniach sygnałów i ostatnim odebranym sygnale */
 static volatile sig_atomic_t *g_pending_requests = NULL;
 static volatile sig_atomic_t g_last_signal = 0;
 
@@ -15,18 +15,18 @@ static void ds_signal_handler(int signo)
 		return;
 	}
 
+    /* Mapowanie odebranego sygnału na odpowiednie flagi 
+	   żądań i zapisywanie numeru ostatniego sygnału. */
 	if (signo == SIGUSR1) {
 		*pending |= DS_REQ_RESCAN;
 		g_last_signal = SIGUSR1;
 		return;
 	}
-
 	if (signo == SIGUSR2) {
 		*pending |= DS_REQ_ABORT_SCAN;
 		g_last_signal = SIGUSR2;
 		return;
 	}
-
 	if (signo == SIGINT || signo == SIGTERM) {
 		*pending |= DS_REQ_TERMINATE;
 		g_last_signal = signo;
@@ -39,6 +39,9 @@ static int install_one_handler(int signo)
 
 	sa.sa_handler = ds_signal_handler;
 	sigemptyset(&sa.sa_mask);
+
+	/* Blokowanie pozostałych sygnałów w trakcie wykonywania handlera 
+	   w celu uniknięcia kolizji i zapewnienia spójności stanu. */
 	sigaddset(&sa.sa_mask, SIGUSR1);
 	sigaddset(&sa.sa_mask, SIGUSR2);
 	sigaddset(&sa.sa_mask, SIGINT);
@@ -105,6 +108,7 @@ int ds_signals_consume_requests(ds_runtime_state_t *state, int *out_last_signal)
 	sigaddset(&set, SIGINT);
 	sigaddset(&set, SIGTERM);
 
+    /* Maskowanie sygnałów na czas odczytu i resetowania flag. */
 	sigprocmask(SIG_BLOCK, &set, &oldset);
 
 	requests = state->pending_requests;
@@ -113,6 +117,7 @@ int ds_signals_consume_requests(ds_runtime_state_t *state, int *out_last_signal)
 	last = g_last_signal;
 	g_last_signal = 0;
 
+    /* Przywrócenie oryginalnej maski sygnałów. */
 	sigprocmask(SIG_SETMASK, &oldset, NULL);
 
 	if (out_last_signal != NULL) {

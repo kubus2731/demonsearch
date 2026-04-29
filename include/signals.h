@@ -1,30 +1,27 @@
-/* Modul: konfiguracja obslugi sygnalow i wspolne flagi. */
-
 #ifndef DEMONSEARCH_SIGNALS_H
 #define DEMONSEARCH_SIGNALS_H
 
 #include "state.h"
 
 /*
- * Instaluje handlery dla sygnałów i ustawia odpowiednie flagi w state->pending_requests.
- * @param state wskaźnik do globalnego stanu runtime (nie może być NULL)
+ * Instaluje asynchroniczne handlery sygnałów (SIGUSR1, SIGUSR2, SIGINT, SIGTERM)
+ * i mapuje je na wewnętrzne flagi maszyny stanów (pending_requests) w ds_runtime_state_t.
  * 
- * Zwraca 0 w przypadku sukcesu, lub -1 przy błędzie.
+ * Zwraca 0 w przypadku sukcesu, -1 w przeciwnym razie.
  */
 int ds_signals_install(ds_runtime_state_t *state);
 
 /*
- * Odinstalowuje handlery sygnałów, przywracając domyślne zachowanie.
+ * Odinstalowuje handlery sygnałów i ustawia ich obsługę na SIG_IGN, aby zignorować te sygnały.
+ * Ustawia również g_pending_requests na NULL, aby zapobiec dalszemu przetwarzaniu.
+ * Wywoływane podczas bezpiecznego zamykania procesu.
  */
 void ds_signals_uninstall(void);
 
 /*
- * Sprawdza i konsumuje pending_requests z state, zwracając aktualne żądania i ostatni odebrany sygnał.
- * @param state wskaźnik do globalnego stanu runtime (nie może być NULL)
- * @param out_last_signal opcjonalny wskaźnik do int, który zostanie ustawiony na numer ostatniego odebranego sygnału, lub 0 jeśli nie było sygnału
- * 
- * Zwraca aktualne żądania (bitmaskę DS_REQ_*) i resetuje pending_requests do DS_REQ_NONE.
- * Jeśli state jest NULL, zwraca DS_REQ_NONE.
+ * Bezpiecznie odczytuje i resetuje zakolejkowane żądania sygnałów (pending_requests) z ds_runtime_state_t.
+ 
+ * Zwraca maskę bitową zakolejkowanych żądań sygnałów (DS_REQ_*).
  */
 int ds_signals_consume_requests(ds_runtime_state_t *state, int *out_last_signal);
 

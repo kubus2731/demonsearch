@@ -12,7 +12,7 @@
 #include <signal.h>
 #include <stddef.h>
 
-/* Powiadamia rodzica o statusie oraz zamyka deksryptor */
+/* Powiadamia przez potok rodzica o statusie demonizacji i zamyka deskryptor. */
 static void notify_parent_and_close(int fd, char status)
 {
     if (fd >= 0) {
@@ -21,7 +21,8 @@ static void notify_parent_and_close(int fd, char status)
     }
 }
 
-/* Zwraca deskryptor w przypadku sukcesu, -1 jeśli inna instancja już działa. */
+/* Tworzy plik PID i zakłada na niego ekskluzywną blokadę zapisu.
+   Zwraca deskryptor pliku PID, lub -1 w przypadku błędu (np. jeśli plik jest już zablokowany). */
 static int create_and_lock_pidfile(const char *pid_file)
 {
     int fd;
@@ -67,11 +68,14 @@ int ds_daemonize(const ds_daemon_config_t *config)
     char status = '0';              /* Status demonizacji, domyślnie '0' (błąd), ustawiany na '1' przy sukcesie */
     ssize_t nread;                  /* Liczba bajtów odczytanych z pipe */
 
+    /* Potok do synchronizacji statusu demonizacji między dzieckiem a rodzicem.
+       Rodzic będzie czekał na wiadomość od dziecka, aby wiedzieć, czy demonizacja się powiodła, zanim zakończy działanie. */
     if (pipe(status_pipe) < 0) {
         return -1;
     }
 
-    /* Pierwszy fork */
+    /* Pierwszy fork.
+       Rodzic kończy działanie, a dziecko kontynuuje demonizację. */
     pid = fork();
     if (pid < 0) {
         close(status_pipe[0]);
@@ -80,7 +84,7 @@ int ds_daemonize(const ds_daemon_config_t *config)
     }
 
     if (pid > 0) {
-        /* Rodzic oczekuje na status od dziecka */
+        /* Rodzic czeka na status demonizacji od dziecka. */
         close(status_pipe[1]);
         nread = read(status_pipe[0], &status, 1);
         close(status_pipe[0]);
@@ -93,11 +97,10 @@ int ds_daemonize(const ds_daemon_config_t *config)
         /* Demonizacja nie powiodła się */
         return -1;
     }
-
-    /* Dziecko kontynuuje demonizację */
     close(status_pipe[0]);
 
-    /* Utworzenie nowej sesji i odłączenie od terminala */
+    /* Utworzenie nowej sesji.
+       Proces staje się liderem sesji i odłącza się od fizycznego terminala sterującego. */
     if (setsid() < 0) {
         notify_parent_and_close(status_pipe[1], '0');
         _exit(EXIT_FAILURE);
@@ -113,7 +116,8 @@ int ds_daemonize(const ds_daemon_config_t *config)
         _exit(EXIT_FAILURE);
     }
 
-    /* Drugi fork */
+    /* Drugi fork. Właściwy proces demonizacji zapobiegający sytuacji, 
+       w której proces jako lider sesji może ponownie przywiązać się do terminala sterującego. */
     pid = fork();
 
     if (pid < 0) {
@@ -121,10 +125,11 @@ int ds_daemonize(const ds_daemon_config_t *config)
         _exit(EXIT_FAILURE);
     }
     if (pid > 0) {
+        /* Pierwsze dziecko kończy działanie, a drugie dziecko kontynuuje jako demon. */
         _exit(EXIT_SUCCESS);
     }
 
-    /* Lock pliku PID musi nalezec do finalnego procesu demona. */
+    /* Blokada pliku PID, jeśli jest skonfigurowany.*/
     if (config->pid_file) {
         pid_fd = create_and_lock_pidfile(config->pid_file);
 
@@ -136,10 +141,13 @@ int ds_daemonize(const ds_daemon_config_t *config)
         }
     }
 
-    /* Ustawienie maski plików na 0, aby mieć pełne uprawnienia do tworzenia plików. */
+    /* Reset uprawnień.
+       Zapewnia, że demon ma pełną kontrolę nad plikami, które tworzy, 
+       bez dziedziczenia niepożądanych uprawnień z procesu nadrzędnego. */
     umask(0);
 
-    /* Zmiana katalogu roboczego na '/' jeśli keep_cwd jest false */
+    /* Odpięcie od bieżącego katalogu roboczego, jeśli konfiguracja tego wymaga.
+       Zapobiega blokowaniu katalogu przez proces demon, co może utrudniać odmontowanie systemów plików. */
     if (!config->keep_cwd) {
         if (chdir("/") < 0) {
             if (pid_fd >= 0) {
@@ -150,9 +158,10 @@ int ds_daemonize(const ds_daemon_config_t *config)
         }
     }
 
-    /* Zamknięcie deskryptorów */
+    /* Zamykanie standardowych deskryptorów I/O i przekierowanie ich do /dev/null, jeśli konfiguracja tego wymaga.
+       Zapewnia, że demon nie będzie przypadkowo czytał z terminala lub pisał do niego. */
     if (config->close_stdio) {
-        /* Pobieramy limit liczby otwartych plików, aby wiedzieć, ile deskryptorów zamknąć. */
+        /* Pobranie limitu liczby otwartych plików */
         if (getrlimit(RLIMIT_NOFILE, &rl) < 0 || rl.rlim_max == RLIM_INFINITY) {
             rl.rlim_max = 1024; /* Bezpieczna domyślna wartość, jeśli nie można pobrać limitu lub jest nieskończony. */
         } else if (rl.rlim_max > 8192) {
@@ -172,11 +181,11 @@ int ds_daemonize(const ds_daemon_config_t *config)
             dup2(fd, STDIN_FILENO); 
             dup2(fd, STDOUT_FILENO);
             dup2(fd, STDERR_FILENO);
-            if (fd > 2) close(fd);  /* Zamykamy dodatkowy deskryptor, jeśli został otwarty. */
+            if (fd > 2) close(fd);  /* Zamknięcie dodatkowego deskryptora, jeśli został otwarty. */
         }
     }
 
-    /* Demonizacja zakończona sukcesem, powiadamiamy rodzica. */
+    /* Sygnał przez potok zwalnia blokadę pierwotnego procesu rodzica, informując go o sukcesie demonizacji. */
     notify_parent_and_close(status_pipe[1], '1');
 
     /* Dziecko kontynuuje działanie jako demon. */

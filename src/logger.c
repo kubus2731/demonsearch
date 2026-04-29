@@ -1,5 +1,3 @@
-/* Implementacja modulu: API logowania do syslog w formacie key=value. */
-
 #include "logger.h"
 
 #include <stdarg.h>
@@ -9,24 +7,13 @@
 #include <syslog.h>
 #include <time.h>
 
+/* Zmienne globalne do zarządzania logowaniem. */
 static int g_logger_open = 0;
 static int g_logger_verbose = 0;
 static char g_logger_ident[16] = "demonsearch";
 
-/*
- * Escapuje wartość do bezpiecznego logowania w formacie key=value.
- * @param src: oryginalny string (może być NULL)
- * @param dst: bufor docelowy, gdzie zostanie zapisany escapowany string
- * @param dst_size: rozmiar bufora docelowego
- *
- * Zasady escapowania:
- * - Jeśli src jest NULL, traktujemy to jako "-" (niezdefiniowane).
- * - Znaki specjalne \ i " są poprzedzane backslashem.
- * - Znaki kontrolne (ASCII < 32 lub 127) są reprezentowane jako \xHH.
- * - Pozostałe znaki są kopiowane bez zmian.
- *
- * Po wywołaniu tej funkcji, dst zawiera escapowany string gotowy do logowania.
- */
+/* Sanitazuje łańcuchy znaków do bezpiecznego logowania w formacie key=value, 
+   unikając problemów z cytowaniem i nieczytelnymi znakami. */
 static void ds_escape_value(const char *src, char *dst, size_t dst_size)
 {
     size_t i = 0;
@@ -66,9 +53,8 @@ static void ds_escape_value(const char *src, char *dst, size_t dst_size)
     dst[j] = '\0';
 }
 
-/*
- * Wewnętrzny wrapper na vsnprintf i syslog z obsługą opóźnionego openlog().
- */
+/* Wewnętrzny adapter dla funkcji vsnprintf i syslog.
+   Otwiera strumień logów jeśli jeszcze nie jest otwarty, formatuje wiadomość i wysyła ją do syslog. */
 static void ds_vlog_with_priority(int priority, const char *fmt, va_list ap)
 {
     char buffer[4096];
@@ -83,9 +69,7 @@ static void ds_vlog_with_priority(int priority, const char *fmt, va_list ap)
     syslog(priority, "%s", buffer);
 }
 
-/*
- * Wariadyczna funkcja logująca z określonym priorytetem.
- */
+/* Wariadyczna funkcja logująca z określonym priorytetem. */
 static void ds_log_with_priority(int priority, const char *fmt, ...)
 {
     va_list ap;
@@ -94,6 +78,7 @@ static void ds_log_with_priority(int priority, const char *fmt, ...)
     va_end(ap);
 }
 
+/* Konwertuje kod powodu wybudzenia na łańcuch znaków. */
 static const char *wakeup_reason_to_str(ds_wakeup_reason_t reason)
 {
     switch (reason) {
@@ -234,14 +219,4 @@ void ds_log_verbose_error(const char *fmt, ...)
     va_start(ap, fmt);
     ds_vlog_with_priority(LOG_ERR, fmt, ap);
     va_end(ap);
-}
-
-void ds_log_process_role(pid_t pid, const char *role_name)
-{
-    char escaped_role[256];
-    ds_escape_value(role_name, escaped_role, sizeof(escaped_role));
-    ds_log_with_priority(LOG_INFO, 
-        "event=process_role pid=%d role=\"%s\"", 
-        (int)pid, 
-        escaped_role);
 }

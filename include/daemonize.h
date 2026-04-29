@@ -1,5 +1,3 @@
-/* Modul: konfiguracja demona i odpiecie od terminala. */
-
 #ifndef DEMONSEARCH_DAEMONIZE_H
 #define DEMONSEARCH_DAEMONIZE_H
 
@@ -8,6 +6,7 @@
 
 /*
  * Struktura konfiguracyjna dla procesu demonizacji.
+ * Umożliwia dostosowanie zachowania procesu podczas transformacji w demona.
  */
 typedef struct {
     bool close_stdio;       /* Jeśli true, zamyka standardowe deskryptory I/O i przekierowuje je do /dev/null. */
@@ -16,11 +15,9 @@ typedef struct {
 } ds_daemon_config_t;
 
 /*
- * Transformuje bieżący proces w demona.
- *
- * Zwraca 0 w przypadku sukcesu, lub -1 przy błędzie.
- * 
- * Parent zawsze kończy się z kodem EXIT_SUCCESS.
+ * Przekształca bieżący proces w niezależnego demona systemowego (wzorzec double-fork).
+ * Zwraca 0 w przypadku sukcesu (proces jest demomen), -1 w przypadku błędu.
+ * Proces rodzica kończy działanie natychmiast po demonizacji.
  */
 int ds_daemonize(const ds_daemon_config_t *config);
 

@@ -1,11 +1,11 @@
-/* Modul: API logowania do syslog (wyniki i zdarzenia verbose). */
-
 #ifndef DEMONSEARCH_LOGGER_H
 #define DEMONSEARCH_LOGGER_H
 
 #include <stdbool.h>
 #include <sys/types.h>
 
+/* Makro do oznaczania funkcji logujących, które przyjmują format printf.
+   Pozwala kompilatorowi sprawdzać poprawność formatowania. */
 #if defined(__GNUC__) || defined(__clang__)
 #define DS_PRINTF_FORMAT(fmt_index, first_arg) __attribute__((format(printf, fmt_index, first_arg)))
 #else
@@ -23,28 +23,23 @@ typedef enum ds_wakeup_reason {
 } ds_wakeup_reason_t;
 
 /*
- * Inicjalizuje logger.
- * @param ident prefiks dla syslog, jeśli NULL lub pusty, użyje "demonsearch"
- * @param verbose czy włączyć logowanie zdarzeń verbose
+ * Inicjalizuje połączenie z syslogiem.
  */
 void ds_logger_init(const char *ident, bool verbose);
 
 /*
- * Zamyka logger.
- *
- * Po wywołaniu tej funkcji, logger jest zamknięty i nie można logować, dopóki ponownie nie zostanie zainicjalizowany.
+ * Bezpiecznie zamyka deskryptory i połączenie z syslogiem.
+ * Powinno być wywoływane podczas zamykania procesu.
  */
 void ds_logger_close(void);
 
 /*
- * Loguje znalezienie dopasowania.
- * @param full_path pełna ścieżka do dopasowanego pliku (nie może być NULL)
- * @param pattern wzorzec, który został dopasowany (nie może być NULL)
+ * Rejestruje znalezienie dopasowania wzorca do pliku.
  */
 void ds_log_match_found(const char *full_path, const char *pattern);
 
 /*
- * Loguje usypianie procesu wraz z interwałem (tylko w trybie verbose).
+ * Loguje wejście procesu w tryb uśpienia wraz z zadanym interwałem (tylko w trybie verbose).
  */
 void ds_log_verbose_sleep(unsigned interval_sec);
 
@@ -55,7 +50,7 @@ void ds_log_verbose_wakeup(ds_wakeup_reason_t reason);
 
 /*
  * Loguje odebranie sygnału (tylko w trybie verbose).
-*/
+ */
 void ds_log_verbose_signal_received(int signo);
 
 /*
@@ -64,28 +59,23 @@ void ds_log_verbose_signal_received(int signo);
 void ds_log_verbose_compare(const char *path, const char *pattern, int matched);
 
 /*
- * Loguje informację.
+ * Wrapper do logowania ogólnych zdarzeń informacyjnych.
  */
 void ds_log_info(const char *fmt, ...) DS_PRINTF_FORMAT(1, 2);
 
 /*
- * Loguje błąd.
+ * Wrapper do logowania ogólnych zdarzeń błędów.
  */
 void ds_log_error(const char *fmt, ...) DS_PRINTF_FORMAT(1, 2);
 
 /*
- * Loguje informację (tylko w trybie verbose).
+ * Wrapper do logowania zdarzeń informacyjnych w trybie verbose.
  */
 void ds_log_verbose_info(const char *fmt, ...) DS_PRINTF_FORMAT(1, 2);
 
 /*
- * Loguje błąd (tylko w trybie verbose).
+ * Wrapper do logowania zdarzeń błędów w trybie verbose.
  */
 void ds_log_verbose_error(const char *fmt, ...) DS_PRINTF_FORMAT(1, 2);
-
-/* 
- * Przekazuje PID i role procesu do logu.
- */
-void ds_log_process_role(pid_t pid, const char *role_name);
 
 #endif /* DEMONSEARCH_LOGGER_H */

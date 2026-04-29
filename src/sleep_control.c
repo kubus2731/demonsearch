@@ -1,5 +1,3 @@
-/* Implementacja modulu: uspienie interwalowe i wybudzanie sygnalem. */
-
 #include "sleep_control.h"
 
 #include <errno.h>
@@ -20,8 +18,14 @@ void ds_sleep_interval(unsigned interval_sec, ds_runtime_state_t *state, ds_wake
 	state->phase = DS_PHASE_SLEEPING;
 	ds_log_verbose_sleep(interval_sec);
 
+	/* Użyto zegara monotonicznego w celu chronienia procesu 
+	   przed niestabilnymi zmianami zegara systemowego. */
 	if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
 		ts.tv_sec += interval_sec;
+
+        /* Proces usypiany do konkretnego punktu w czasie.
+		   Wybudzenie następuje tylko po upływie czasu lub przez 
+		   przerwanie systemowe (EINTR) wywołane nadejściem sygnału. */
 		while ((err = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL)) != 0) {
 			if (err == EINTR) {
 				break;
@@ -32,6 +36,7 @@ void ds_sleep_interval(unsigned interval_sec, ds_runtime_state_t *state, ds_wake
 		}
 	}
 
+    /* Mapowanie stanu globalnego na konkretny powód wybudzenia. */
 	if (state->pending_requests != DS_REQ_NONE) {
 		if (state->pending_requests & DS_REQ_RESCAN) {
 			reason = DS_WAKEUP_SIGUSR1;

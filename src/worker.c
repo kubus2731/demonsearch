@@ -1,5 +1,3 @@
-/* Implementacja modulu: jeden cykl skanu workera dla wzorca. */
-
 #include "worker.h"
 #include "logger.h"
 #include "scanner.h"
@@ -19,6 +17,7 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
     int last_signal;
     ds_phase_t last_phase;  /* Przechowuje poprzedni stan, aby logować tylko zmiany stanu. */
 
+    /* Inicjalizacja stanu runtime. */
     state.role = DS_ROLE_WORKER;
     state.phase = DS_PHASE_SLEEPING;
     state.verbose = verbose;
@@ -32,9 +31,12 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
 
     ds_log_verbose_info("component=worker event=start pattern=\"%s\" pid=%d", pattern, (int)getpid());
 
+    /* Główna pętla procesu roboczego. Kontynuuje działanie aż 
+       do otrzymania żądania zakończenia (DS_REQ_TERMINATE). */
     while (1) {
         ds_wakeup_reason_t wakeup_reason;
 
+        /* Walidacja stanu po wybudzeniu ze snu. */
         requests = ds_signals_consume_requests(&state, &last_signal);
 
         if (last_signal != 0) {
@@ -45,7 +47,8 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
             break;
         }
 
-        /* Przejdź do snu, jeśli otrzymano SIGUSR2 bez równoczesnego SIGUSR1. */
+        /* Jeśli proces ma zostać uśpiony bez natychmiastowego 
+           ponownego skanowania, przejdź do snu. */
         if ((requests & DS_REQ_RESCAN) == 0 && (requests & DS_REQ_ABORT_SCAN)) {
             state.phase = DS_PHASE_SLEEPING;
             if (last_phase != DS_PHASE_SLEEPING) {
@@ -57,14 +60,16 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
             continue;
         }
 
-        /* Stan ustawiony na SCANNING przed rozpoczęciem skanowania, aby logować odpowiednio zdarzenia. */
+        /* Zarejestrowanie przejścia do fazy skanowania. */
         state.phase = DS_PHASE_SCANNING;
         if (last_phase != DS_PHASE_SCANNING) {
             ds_log_verbose_info("component=worker event=state_change state=SCANNING pattern=\"%s\" pid=%d", pattern, (int)getpid());
             last_phase = DS_PHASE_SCANNING;
         }
-        ds_log_verbose_info("component=worker event=scan_start pattern=\"%s\" pid=%d", pattern, (int)getpid());
 
+        /* Rozpoczęcie skanowania drzewa katalogów.
+           Skanowanie może zostać przerwane asynchronicznie przez sygnał. */
+        ds_log_verbose_info("component=worker event=scan_start pattern=\"%s\" pid=%d", pattern, (int)getpid());
         if (ds_scanner_scan_tree(start_dir, pattern, &state.pending_requests, &stats) != 0) {
             if (state.pending_requests != DS_REQ_NONE) {
                 ds_log_verbose_info("component=worker event=scan_interrupted pattern=\"%s\"", pattern);
@@ -73,6 +78,7 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
             }
         }
 
+        /* Po zakończeniu skanowania, sprawdź zakolejkowane żądania. */
         requests = ds_signals_consume_requests(&state, &last_signal);
         if (last_signal != 0) {
             ds_log_verbose_signal_received(last_signal);
@@ -82,12 +88,12 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
             break;
         }
 
-        /* Natychmiastowe ponowne skanowanie, jeśli otrzymano SIGUSR1. */
+        /* Obsługa żądania natychmiastowego ponownego skanowania. */
         if (requests & DS_REQ_RESCAN) {
             continue;
         }
 
-        /* Po przerwaniu skanu (SIGUSR2) lub normalnym zakończeniu, przejdź do snu. */
+        /* Po przerwaniu skanu lub normalnym zakończeniu, przejdź do snu. */
         state.phase = DS_PHASE_SLEEPING;
         if (last_phase != DS_PHASE_SLEEPING) {
             ds_log_verbose_info("component=worker event=state_change state=SLEEPING pattern=\"%s\" pid=%d", pattern, (int)getpid());
@@ -97,9 +103,8 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
         ds_log_verbose_wakeup(wakeup_reason);
     }
 
-    ds_log_verbose_info("component=worker event=state_change state=SHUTDOWN pattern=\"%s\" pid=%d", pattern, (int)getpid());
-    ds_log_verbose_info("component=worker event=shutdown pattern=\"%s\"", pattern);
-
+    /* Zakończenie pracy i zwolnienie zasobów przypisanych do workera. */
+    ds_log_verbose_info("component=worker event=shutdown state=SHUTDOWN pattern=\"%s\" pid=%d", pattern, (int)getpid());
     ds_signals_uninstall();
 
     return EXIT_SUCCESS;
