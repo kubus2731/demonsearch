@@ -124,7 +124,7 @@ void ds_log_match_found(const char* component, const char *full_path, const char
             dt, escaped_pattern, escaped_path);
     } else {
         ds_log_with_priority(LOG_INFO,
-            "component=\"%s\" event=match timestamp=%s pattern=\"%s\" path=\"%s\"",
+            "component=%s event=match timestamp=%s pattern=\"%s\" path=\"%s\"",
             component, dt, escaped_pattern, escaped_path);
     }
 }
@@ -143,7 +143,7 @@ void ds_log_verbose_compare(const char* component, const char *path, const char 
                 escaped_path, escaped_pattern, matched ? "true" : "false");
         } else {
             ds_log_with_priority(LOG_DEBUG, 
-                "component=\"%s\" event=compare path=\"%s\" pattern=\"%s\" matched=%s", 
+                "component=%s event=compare path=\"%s\" pattern=\"%s\" matched=%s", 
                 component, escaped_path, escaped_pattern, matched ? "true" : "false");
         }
     }
