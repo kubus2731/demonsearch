@@ -55,7 +55,7 @@ int ds_supervisor_run(ds_proc_table_t *ptable)
             continue;
         }
 
-        ds_log_verbose_signal_received(sig);
+        ds_log_verbose_info("component=supervisor event=signal_received signal=%d", sig);
 
         /* Zamykanie demona (SIGTERM/SIGINT) */
         if (sig == SIGTERM || sig == SIGINT) {

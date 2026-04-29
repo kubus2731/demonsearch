@@ -16,7 +16,8 @@ void ds_sleep_interval(unsigned interval_sec, ds_runtime_state_t *state, ds_wake
 	}
 
 	state->phase = DS_PHASE_SLEEPING;
-	ds_log_verbose_sleep(interval_sec);
+	ds_log_verbose_info("component=%s event=sleep interval_sec=%u",
+						(state->role == DS_ROLE_WORKER) ? "worker" : "supervisor", interval_sec);
 
 	/* Użyto zegara monotonicznego w celu chronienia procesu 
 	   przed niestabilnymi zmianami zegara systemowego. */

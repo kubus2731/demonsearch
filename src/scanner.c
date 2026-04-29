@@ -50,7 +50,8 @@ static char *join_path(const char *dir_path, const char *name)
 }
 
 /* Rekurencyjnie skanuje katalog, aktualizując statystyki i sprawdzając dopasowania. */
-static int scan_dir_recursive(const char *dir_path,
+static int scan_dir_recursive(const char *component,
+							  const char *dir_path,
 							  const char *pattern,
 							  volatile sig_atomic_t *abort_scan,
 							  ds_scan_stats_t *stats)
@@ -138,15 +139,15 @@ static int scan_dir_recursive(const char *dir_path,
 		int matched = ds_match_contains(entry->d_name, pattern);
 
 		/* Logowanie wyników porównania w trybie verbose. */
-		ds_log_verbose_compare(full_path, pattern, matched);
+		ds_log_verbose_compare(component, full_path, pattern, matched);
 
 		if (matched) {
 			stats->matches++;
-			ds_log_match_found(full_path, pattern);
+			ds_log_match_found(component, full_path, pattern);
 		}
 
 		if (is_dir) {
-			int rc = scan_dir_recursive(full_path, pattern, abort_scan, stats);
+			int rc = scan_dir_recursive(component, full_path, pattern, abort_scan, stats);
 			if (rc != 0) {
 				free(full_path);
 				closedir(dir);
@@ -161,7 +162,8 @@ static int scan_dir_recursive(const char *dir_path,
 	return 0;
 }
 
-int ds_scanner_scan_tree(const char *root_path,
+int ds_scanner_scan_tree(const char *component,
+						 const char *root_path,
 						 const char *pattern,
 						 volatile sig_atomic_t *abort_scan,
 						 ds_scan_stats_t *out_stats)
@@ -174,7 +176,7 @@ int ds_scanner_scan_tree(const char *root_path,
 		return -1;
 	}
 
-	rc = scan_dir_recursive(root_path, pattern, abort_scan, &tmp);
+	rc = scan_dir_recursive(component, root_path, pattern, abort_scan, &tmp);
 
 	if (out_stats != NULL) {
 		*out_stats = tmp;

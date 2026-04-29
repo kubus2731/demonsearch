@@ -22,7 +22,8 @@ typedef struct ds_scan_stats {
  * 1 jeśli wymuszono przerwanie skanowania sygnałem,
  * -1 przy błędnych parametrach.
  */
-int ds_scanner_scan_tree(const char *root_path,
+int ds_scanner_scan_tree(const char *component, 
+						 const char *root_path,
 						 const char *pattern,
 						 volatile sig_atomic_t *abort_scan,
 						 ds_scan_stats_t *out_stats);

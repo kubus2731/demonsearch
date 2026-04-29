@@ -4,6 +4,14 @@
 #include "logger.h"
 #include "state.h"
 
+/* Powód wybudzenia procesu z trybu uśpienia. */
+typedef enum ds_wakeup_reason {
+    DS_WAKEUP_INTERVAL = 0,
+    DS_WAKEUP_SIGUSR1 = 1,
+    DS_WAKEUP_SIGUSR2 = 2,
+    DS_WAKEUP_OTHER = 3,
+} ds_wakeup_reason_t;
+
 /*
  * Blokuje wykonanie procesu na zdefiniowany interwał czasowy, zachowując gotowość
  * do natychmiastowego, asynchronicznego wybudzenia przez handlery sygnałów.

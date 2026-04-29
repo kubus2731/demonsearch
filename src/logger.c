@@ -16,38 +16,40 @@ static char g_logger_ident[16] = "demonsearch";
    unikając problemów z cytowaniem i nieczytelnymi znakami. */
 static void ds_escape_value(const char *src, char *dst, size_t dst_size)
 {
-    size_t i = 0;
-    size_t j = 0;
+    size_t i = 0, j = 0;
     const char *in = (src != NULL) ? src : "-";
 
-    if (dst_size == 0) {
-        return;
-    }
+    if (dst_size == 0) return;
 
     while (in[i] != '\0' && j + 1 < dst_size) {
         unsigned char c = (unsigned char)in[i++];
 
-        if (c == '\\' || c == '"') {
-            if (j + 2 >= dst_size) {
-                break;
-            }
-            dst[j++] = '\\';
+        /* Zwykłe znaki ASCII są kopiowane bez zmian, z wyjątkiem cudzysłowów i backslashy. */
+        if (c >= 32 && c <= 126 && c != '"' && c != '\\') {
             dst[j++] = (char)c;
             continue;
         }
 
-        if (c < 32 || c == 127) {
-            if (j + 4 >= dst_size) {
-                break;
-            }
-            dst[j++] = '\\';
-            dst[j++] = 'x';
-            dst[j++] = "0123456789ABCDEF"[(c >> 4) & 0x0F];
-            dst[j++] = "0123456789ABCDEF"[c & 0x0F];
-            continue;
-        }
+        /* Sprawdzanie, czy jest wystarczająco dużo miejsca na zapisanie sekwencji ucieczki. */
+        if (j + 2 >= dst_size) break;
 
-        dst[j++] = (char)c;
+        switch (c) {
+            case '"': dst[j++] = '\\'; dst[j++] = '"'; break;
+            case '\\': dst[j++] = '\\'; dst[j++] = '\\'; break;
+            case '\n': dst[j++] = '\\'; dst[j++] = 'n'; break;
+            case '\r': dst[j++] = '\\'; dst[j++] = 'r'; break;
+            case '\t': dst[j++] = '\\'; dst[j++] = 't'; break;
+            default:
+                /* Nieczytelne znaki są reprezentowane jako \xHH. */
+                if (j + 4 >= dst_size) {
+                    /* Nie ma wystarczająco dużo miejsca na pełną sekwencję ucieczki, więc kończymy tutaj. */
+                    dst[j] = '\0';
+                    return;
+                }
+                snprintf(&dst[j], dst_size - j, "\\x%02x", c);
+                j += 4;
+                break;
+        }
     }
 
     dst[j] = '\0';
@@ -78,22 +80,6 @@ static void ds_log_with_priority(int priority, const char *fmt, ...)
     va_end(ap);
 }
 
-/* Konwertuje kod powodu wybudzenia na łańcuch znaków. */
-static const char *wakeup_reason_to_str(ds_wakeup_reason_t reason)
-{
-    switch (reason) {
-    case DS_WAKEUP_INTERVAL:
-        return "interval";
-    case DS_WAKEUP_SIGUSR1:
-        return "SIGUSR1";
-    case DS_WAKEUP_SIGUSR2:
-        return "SIGUSR2";
-    case DS_WAKEUP_OTHER:
-    default:
-        return "other";
-    }
-}
-
 void ds_logger_init(const char *ident, bool verbose)
 {
     if (ident != NULL && *ident != '\0') {
@@ -117,7 +103,7 @@ void ds_logger_close(void)
     }
 }
 
-void ds_log_match_found(const char *full_path, const char *pattern)
+void ds_log_match_found(const char* component, const char *full_path, const char *pattern)
 {
     char dt[32];
     char escaped_path[2048];
@@ -132,52 +118,34 @@ void ds_log_match_found(const char *full_path, const char *pattern)
     ds_escape_value(full_path, escaped_path, sizeof(escaped_path));
     ds_escape_value(pattern, escaped_pattern, sizeof(escaped_pattern));
 
-    ds_log_with_priority(LOG_INFO,
-        "event=match timestamp=%s pattern=\"%s\" path=\"%s\"",
-        dt,
-        escaped_pattern,
-        escaped_path);
-}
-
-void ds_log_verbose_sleep(unsigned interval_sec)
-{
-    if (g_logger_verbose) {
-        ds_log_with_priority(LOG_DEBUG,
-            "event=sleep interval_sec=%u",
-            interval_sec);
+    if (component == NULL || *component == '\0') {
+        ds_log_with_priority(LOG_INFO,
+            "event=match timestamp=%s pattern=\"%s\" path=\"%s\"",
+            dt, escaped_pattern, escaped_path);
+    } else {
+        ds_log_with_priority(LOG_INFO,
+            "component=\"%s\" event=match timestamp=%s pattern=\"%s\" path=\"%s\"",
+            component, dt, escaped_pattern, escaped_path);
     }
 }
 
-void ds_log_verbose_wakeup(ds_wakeup_reason_t reason)
-{
-    if (g_logger_verbose) {
-        ds_log_with_priority(LOG_DEBUG,
-            "event=wakeup reason=%s",
-            wakeup_reason_to_str(reason));
-    }
-}
-
-void ds_log_verbose_signal_received(int signo)
-{
-    if (g_logger_verbose) {
-        ds_log_with_priority(LOG_DEBUG, 
-            "event=signal_received signal=%d", 
-            signo);
-    }
-}
-
-void ds_log_verbose_compare(const char *path, const char *pattern, int matched)
+void ds_log_verbose_compare(const char* component, const char *path, const char *pattern, int matched)
 {
     if (g_logger_verbose) {
         char escaped_path[2048];
         char escaped_pattern[1024];
         ds_escape_value(path, escaped_path, sizeof(escaped_path));
         ds_escape_value(pattern, escaped_pattern, sizeof(escaped_pattern));
-        ds_log_with_priority(LOG_DEBUG, 
-            "event=compare path=\"%s\" pattern=\"%s\" matched=%s", 
-            escaped_path,
-            escaped_pattern,
-            matched ? "true" : "false");
+
+        if (component == NULL || *component == '\0') {
+            ds_log_with_priority(LOG_DEBUG, 
+                "event=compare path=\"%s\" pattern=\"%s\" matched=%s", 
+                escaped_path, escaped_pattern, matched ? "true" : "false");
+        } else {
+            ds_log_with_priority(LOG_DEBUG, 
+                "component=\"%s\" event=compare path=\"%s\" pattern=\"%s\" matched=%s", 
+                component, escaped_path, escaped_pattern, matched ? "true" : "false");
+        }
     }
 }
 
