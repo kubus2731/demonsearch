@@ -42,11 +42,6 @@ void ds_sleep_interval(unsigned interval_sec, ds_runtime_state_t *state, ds_wake
 		}
 	}
 
-	if (reason != DS_WAKEUP_SIGUSR2) {
-		state->phase = DS_PHASE_SCANNING;
-		ds_log_verbose_wakeup(reason);
-	}
-
 	if (out_reason != NULL) {
 		*out_reason = reason;
 	}

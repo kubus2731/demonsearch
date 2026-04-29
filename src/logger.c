@@ -157,8 +157,8 @@ void ds_log_match_found(const char *full_path, const char *pattern)
 void ds_log_verbose_sleep(unsigned interval_sec)
 {
     if (g_logger_verbose) {
-        ds_log_with_priority(LOG_DEBUG, 
-            "event=sleep state=sleeping interval_sec=%u", 
+        ds_log_with_priority(LOG_DEBUG,
+            "event=sleep interval_sec=%u",
             interval_sec);
     }
 }
@@ -166,8 +166,8 @@ void ds_log_verbose_sleep(unsigned interval_sec)
 void ds_log_verbose_wakeup(ds_wakeup_reason_t reason)
 {
     if (g_logger_verbose) {
-        ds_log_with_priority(LOG_DEBUG, 
-            "event=wakeup state=scanning reason=%s", 
+        ds_log_with_priority(LOG_DEBUG,
+            "event=wakeup reason=%s",
             wakeup_reason_to_str(reason));
     }
 }

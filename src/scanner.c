@@ -126,7 +126,7 @@ static int scan_dir_recursive(const char *dir_path,
 		is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
 
 		int matched = ds_match_contains(entry->d_name, pattern);
-		ds_log_verbose_compare(full_path, pattern, matched);
+		//ds_log_verbose_compare(full_path, pattern, matched);
 
 		if (matched) {
 			stats->matches++;
