@@ -1,7 +1,6 @@
 #ifndef DEMONSEARCH_SLEEP_CONTROL_H
 #define DEMONSEARCH_SLEEP_CONTROL_H
 
-#include "logger.h"
 #include "state.h"
 
 /* Powód wybudzenia procesu z trybu uśpienia. */

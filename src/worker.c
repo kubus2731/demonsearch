@@ -8,6 +8,17 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+/* Callbacki dla skanera przypinane do loggera. */
+static void worker_on_compare(const char *path, const char *pattern, int matched)
+{
+    ds_log_verbose_compare("worker", path, pattern, matched);
+}
+
+static void worker_on_match(const char *path, const char *pattern)
+{
+    ds_log_match_found("worker", path, pattern);
+}
+
 /* Mapowanie powodu wybudzenia na czytelny łańcuch znaków do logowania. */
 static const char *get_wakeup_reason_str(ds_wakeup_reason_t reason)
 {
@@ -33,6 +44,10 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
     int requests;
     int last_signal;
     ds_phase_t last_phase;  /* Przechowuje poprzedni stan, aby logować tylko zmiany stanu. */
+    ds_scanner_callbacks_t callbacks = {
+        .on_compare = worker_on_compare,
+        .on_match = worker_on_match
+    };
 
     /* Inicjalizacja stanu runtime. */
     state.role = DS_ROLE_WORKER;
@@ -57,7 +72,7 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
         requests = ds_signals_consume_requests(&state, &last_signal);
 
         if (last_signal != 0) {
-            ds_log_verbose_info("component=worker event=signal_received signal=%d", last_signal);
+            ds_log_verbose_info("component=worker event=signal_received pattern=\"%s\" signal=%d", pattern, last_signal);
         }
 
         if (requests & DS_REQ_TERMINATE) {
@@ -72,8 +87,9 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
                 ds_log_verbose_info("component=worker event=state_change state=sleeping pattern=\"%s\"", pattern);
                 last_phase = DS_PHASE_SLEEPING;
             }
+            ds_log_verbose_info("component=worker event=sleep pattern=\"%s\" interval_sec=%u", pattern, interval_sec);
             ds_sleep_interval(interval_sec, &state, &wakeup_reason);
-            ds_log_verbose_info("component=worker event=wakeup reason=%s", get_wakeup_reason_str(wakeup_reason));
+            ds_log_verbose_info("component=worker event=wakeup pattern=\"%s\" reason=%s", pattern, get_wakeup_reason_str(wakeup_reason));
             continue;
         }
 
@@ -87,18 +103,26 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
         /* Rozpoczęcie skanowania drzewa katalogów.
            Skanowanie może zostać przerwane asynchronicznie przez sygnał. */
         ds_log_verbose_info("component=worker event=scan_start pattern=\"%s\"", pattern);
-        if (ds_scanner_scan_tree("worker", start_dir, pattern, &state.pending_requests, &stats) != 0) {
-            if (state.pending_requests != DS_REQ_NONE) {
+        
+        int scan_result = ds_scanner_scan_tree(start_dir, pattern, &state.pending_requests, &stats, &callbacks);
+        if (scan_result != 0) {
+            if (scan_result == -2) {
+                /* Krytyczny błąd dostępu do katalogu startowego. */
+                ds_log_error("component=worker event=root_dir_access_failed pattern=\"%s\" path=\"%s\"", pattern, start_dir);
+                break;
+            } else if (state.pending_requests != DS_REQ_NONE) {
                 ds_log_verbose_info("component=worker event=scan_interrupted pattern=\"%s\"", pattern);
             } else {
-                ds_log_error("component=worker event=scan_failed pattern=\"%s\"", pattern);
+                /* Krytyczny błąd argumentów. */
+                ds_log_error("component=worker event=scan_invalid_args pattern=\"%s\"", pattern);
+                break;
             }
         }
 
         /* Po zakończeniu skanowania, sprawdź zakolejkowane żądania. */
         requests = ds_signals_consume_requests(&state, &last_signal);
         if (last_signal != 0) {
-            ds_log_verbose_info("component=worker event=signal_received signal=%d", last_signal);
+            ds_log_verbose_info("component=worker event=signal_received pattern=\"%s\" signal=%d", pattern, last_signal);
         }
         
         if (requests & DS_REQ_TERMINATE) {
@@ -116,8 +140,9 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
             ds_log_verbose_info("component=worker event=state_change state=sleeping pattern=\"%s\"", pattern);
             last_phase = DS_PHASE_SLEEPING;
         }
+        ds_log_verbose_info("component=worker event=sleep pattern=\"%s\" interval_sec=%u", pattern, interval_sec);
         ds_sleep_interval(interval_sec, &state, &wakeup_reason);
-        ds_log_verbose_info("component=worker event=wakeup reason=%s", get_wakeup_reason_str(wakeup_reason));
+        ds_log_verbose_info("component=worker event=wakeup pattern=\"%s\" reason=%s", pattern, get_wakeup_reason_str(wakeup_reason));
     }
 
     /* Zakończenie pracy i zwolnienie zasobów przypisanych do workera. */

@@ -1,6 +1,5 @@
 #include "scanner.h"
 
-#include "logger.h"
 #include "match.h"
 
 #include <dirent.h>
@@ -50,11 +49,11 @@ static char *join_path(const char *dir_path, const char *name)
 }
 
 /* Rekurencyjnie skanuje katalog, aktualizując statystyki i sprawdzając dopasowania. */
-static int scan_dir_recursive(const char *component,
-							  const char *dir_path,
+static int scan_dir_recursive(const char *dir_path,
 							  const char *pattern,
 							  volatile sig_atomic_t *abort_scan,
-							  ds_scan_stats_t *stats)
+							  ds_scan_stats_t *stats,
+                              const ds_scanner_callbacks_t *callbacks)
 {
 	DIR *dir;
 	struct dirent *entry;
@@ -138,16 +137,22 @@ static int scan_dir_recursive(const char *component,
 
 		int matched = ds_match_contains(entry->d_name, pattern);
 
-		/* Logowanie wyników porównania w trybie verbose. */
-		ds_log_verbose_compare(component, full_path, pattern, matched);
+		/* Wywołanie callbacków, jeśli zostały podane. */
+        if (callbacks != NULL) {
+            if (callbacks->on_compare != NULL) {
+                callbacks->on_compare(full_path, pattern, matched);
+            }
+            if (matched && callbacks->on_match != NULL) {
+                callbacks->on_match(full_path, pattern);
+            }
+        }
 
 		if (matched) {
 			stats->matches++;
-			ds_log_match_found(component, full_path, pattern);
 		}
 
 		if (is_dir) {
-			int rc = scan_dir_recursive(component, full_path, pattern, abort_scan, stats);
+			int rc = scan_dir_recursive(full_path, pattern, abort_scan, stats, callbacks);
 			if (rc != 0) {
 				free(full_path);
 				closedir(dir);
@@ -162,11 +167,11 @@ static int scan_dir_recursive(const char *component,
 	return 0;
 }
 
-int ds_scanner_scan_tree(const char *component,
-						 const char *root_path,
+int ds_scanner_scan_tree(const char *root_path,
 						 const char *pattern,
 						 volatile sig_atomic_t *abort_scan,
-						 ds_scan_stats_t *out_stats)
+						 ds_scan_stats_t *out_stats,
+                         const ds_scanner_callbacks_t *callbacks)
 {
 	ds_scan_stats_t tmp = {0, 0, 0, 0, 0};
 	int rc;
@@ -176,7 +181,12 @@ int ds_scanner_scan_tree(const char *component,
 		return -1;
 	}
 
-	rc = scan_dir_recursive(component, root_path, pattern, abort_scan, &tmp);
+    /* Sprawdzenie czy główny katalog jest dostępny do odczytu i wykonania. */
+    if (access(root_path, R_OK | X_OK) != 0) {
+        return -2;
+    }
+
+	rc = scan_dir_recursive(root_path, pattern, abort_scan, &tmp, callbacks);
 
 	if (out_stats != NULL) {
 		*out_stats = tmp;
