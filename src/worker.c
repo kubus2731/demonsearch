@@ -46,7 +46,7 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
         return EXIT_FAILURE;
     }
 
-    ds_log_verbose_info("component=worker event=start pattern=\"%s\" pid=%d", pattern, (int)getpid());
+    ds_log_verbose_info("component=worker event=start pattern=\"%s\"", pattern);
 
     /* Główna pętla procesu roboczego. Kontynuuje działanie aż 
        do otrzymania żądania zakończenia (DS_REQ_TERMINATE). */
@@ -69,7 +69,7 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
         if ((requests & DS_REQ_RESCAN) == 0 && (requests & DS_REQ_ABORT_SCAN)) {
             state.phase = DS_PHASE_SLEEPING;
             if (last_phase != DS_PHASE_SLEEPING) {
-                ds_log_verbose_info("component=worker event=state_change state=SLEEPING pattern=\"%s\" pid=%d", pattern, (int)getpid());
+                ds_log_verbose_info("component=worker event=state_change state=SLEEPING pattern=\"%s\"", pattern);
                 last_phase = DS_PHASE_SLEEPING;
             }
             ds_sleep_interval(interval_sec, &state, &wakeup_reason);
@@ -80,13 +80,13 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
         /* Zarejestrowanie przejścia do fazy skanowania. */
         state.phase = DS_PHASE_SCANNING;
         if (last_phase != DS_PHASE_SCANNING) {
-            ds_log_verbose_info("component=worker event=state_change state=SCANNING pattern=\"%s\" pid=%d", pattern, (int)getpid());
+            ds_log_verbose_info("component=worker event=state_change state=SCANNING pattern=\"%s\"", pattern);
             last_phase = DS_PHASE_SCANNING;
         }
 
         /* Rozpoczęcie skanowania drzewa katalogów.
            Skanowanie może zostać przerwane asynchronicznie przez sygnał. */
-        ds_log_verbose_info("component=worker event=scan_start pattern=\"%s\" pid=%d", pattern, (int)getpid());
+        ds_log_verbose_info("component=worker event=scan_start pattern=\"%s\"", pattern);
         if (ds_scanner_scan_tree("worker", start_dir, pattern, &state.pending_requests, &stats) != 0) {
             if (state.pending_requests != DS_REQ_NONE) {
                 ds_log_verbose_info("component=worker event=scan_interrupted pattern=\"%s\"", pattern);
@@ -113,7 +113,7 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
         /* Po przerwaniu skanu lub normalnym zakończeniu, przejdź do snu. */
         state.phase = DS_PHASE_SLEEPING;
         if (last_phase != DS_PHASE_SLEEPING) {
-            ds_log_verbose_info("component=worker event=state_change state=SLEEPING pattern=\"%s\" pid=%d", pattern, (int)getpid());
+            ds_log_verbose_info("component=worker event=state_change state=SLEEPING pattern=\"%s\"", pattern);
             last_phase = DS_PHASE_SLEEPING;
         }
         ds_sleep_interval(interval_sec, &state, &wakeup_reason);
@@ -121,7 +121,7 @@ int ds_worker_run(const char *start_dir, const char *pattern, unsigned interval_
     }
 
     /* Zakończenie pracy i zwolnienie zasobów przypisanych do workera. */
-    ds_log_verbose_info("component=worker event=shutdown state=SHUTDOWN pattern=\"%s\" pid=%d", pattern, (int)getpid());
+    ds_log_verbose_info("component=worker event=shutdown state=SHUTDOWN pattern=\"%s\"", pattern);
     ds_signals_uninstall();
 
     return EXIT_SUCCESS;

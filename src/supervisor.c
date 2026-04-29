@@ -37,8 +37,7 @@ int ds_supervisor_run(ds_proc_table_t *ptable)
        zakończyć przed wejściem w główną pętlę. */
     while ((early_pid = waitpid(-1, &early_status, WNOHANG)) > 0) {
         ds_ptable_remove(ptable, early_pid);
-        ds_log_verbose_info("component=supervisor event=early_worker_exit pid=%d remaining_workers=%zu",
-                    (int)early_pid, ptable->active_count);
+        ds_log_verbose_info("component=supervisor event=early_worker_exit remaining_workers=%zu", ptable->active_count);
     }
 
     if (early_pid < 0 && errno != ECHILD) {
@@ -75,8 +74,7 @@ int ds_supervisor_run(ds_proc_table_t *ptable)
             
             while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
                 ds_ptable_remove(ptable, pid);
-				ds_log_verbose_info("component=supervisor event=worker_exit pid=%d remaining_workers=%zu", 
-                            (int)pid, ptable->active_count);
+				ds_log_verbose_info("component=supervisor event=worker_exit remaining_workers=%zu", ptable->active_count);
             }
         }
     }
