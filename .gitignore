@@ -17,3 +17,6 @@ demonsearch
 # OS
 .DS_Store
 Thumbs.db
+
+# SCRIPTS
+scripts/
