@@ -114,14 +114,17 @@
     
     \subsection{Standardowe uruchomienie z kilkoma wzorcami}
     Demon został wywołany z pięcioma poszukiwanymi wzorcami. Komenda \textbf{\texttt{ps u -C demonsearch}} (Rysunek \ref*{fig:ps}) potwierdza proces demonizacji i utworzenie dokładnie pięciu podprocesów powiązanych z procesem nadzorczym. Dodatkowo ujęto scenariusz pokazujący wysłanie sygnału zamknięcia (\texttt{kill}) do samego nadzorcy (supervisor), co skutkowało całkowitym wyczyszczeniem środowiska (\texttt{ps u} wykazał puste zwrócone linie), co dowodzi o bezpiecznym sprzątaniu i powiązaniu hierarchicznym procesów.
-    \begin{figure}[H]
+    
+	\begin{figure}[H]
         \centering
         \includegraphics[width=\textwidth]{img1.png}
         \caption{Lista uruchomionych procesów demona oraz weryfikacja ich kaskadowego zamknięcia po uśmierceniu nadzorcy.}
         \label{fig:ps}
     \end{figure}
-    Standardowe wyjście w systemowym dzienniku (Rysunek \ref*{fig:syslog}) potwierdza, że logowany jest czas, pełna ścieżka i powiązany z procesem na sztywno wzorzec (bez użycia PID'ów w treści, co eliminuje nieczytelność po restartach):
-    \begin{figure}[H]
+    
+	Standardowe wyjście w systemowym dzienniku (Rysunek \ref*{fig:syslog}) potwierdza, że logowany jest czas, pełna ścieżka i powiązany z procesem na sztywno wzorzec (bez użycia PID'ów w treści, co eliminuje nieczytelność po restartach):
+    
+	\begin{figure}[H]
         \centering
         \includegraphics[width=\textwidth]{img2.png}
         \caption{Zrzut wpisów z dziennika po dopasowaniu plików do wzorców.}
