@@ -84,47 +84,61 @@
 	\subsection{Moduł Inicjalizacji, Konfiguracji i Głównej Pętli (\textbf{\texttt{main}}, \textbf{\texttt{args}}, \textbf{\texttt{daemonize}}, \textbf{\texttt{state}})}
 	Moduł ten odpowiada za punkt wejścia do programu, wczytanie konfiguracji oraz transformację procesu w demona systemowego.
 	\begin{itemize}
-		\item \textbf{Opis działania:} Moduł parsuje argumenty z wiersza poleceń (\textbf{\texttt{args.c}}), w tym wzorce poszukiwań, opcjonalny czas uśpienia i flagę \textbf{\texttt{-v}} (verbose). Następnie wykonuje procedurę odpięcia programu od terminala (\textbf{\texttt{daemonize.c}}), powołując do życia demona. W pliku \textbf{\texttt{state.h}} zdefiniowano współdzielone struktury konfiguracyjne i stałe czasowe (runtime), z których korzysta główna pętla w \textbf{\texttt{main.c}}.
+		\item \textbf{Opis działania:} Moduł parsuje argumenty z wiersza poleceń (\textbf{\texttt{args.c}}), w tym wzorce poszukiwań, opcjonalny czas uśpienia i flagę \textbf{\texttt{-v}} (verbose). Następnie wykonuje procedurę odpięcia programu od terminala (\textbf{\texttt{daemonize.c}}), powołując do życia demona. Proces demonizacji został dodatkowo zabezpieczony przed wielokrotnym niezamierzonym uruchomieniem za pomocą pliku PID z blokadą systemową (\textbf{\texttt{fcntl}} na \textbf{\texttt{/tmp/demonsearch.pid}}). W pliku \textbf{\texttt{state.h}} zdefiniowano współdzielone struktury konfiguracyjne i stałe czasowe (runtime), z których korzysta główna pętla w \textbf{\texttt{main.c}}.
 		\item \textbf{Kluczowe zmienne globalne:} Struktura konfiguracyjna przechowująca listę argumentów (wzorców) do wyszukiwania, czas uśpienia oraz flagę trybu \textit{verbose}.
 	\end{itemize}
 	
 	\subsection{Moduł Nadzorcy i Współbieżności (\textbf{\texttt{supervisor}}, \textbf{\texttt{proc\_table}}, \textbf{\texttt{worker}})}
 	Moduł realizujący wymóg współbieżnego przeszukiwania na podstawie procesów potomnych oraz realizujący logikę procesu nadzorczego (supervisor).
 	\begin{itemize}
-		\item \textbf{Opis działania:} Plik \textbf{\texttt{supervisor.c}} implementuje orkiestrację procesu nadzorczego. Na podstawie ilości argumentów, tworzone są procesy robocze, czyli workery, gdzie ich implementacja jest w \textbf{\texttt{worker.c}}, gdzie każdy odpowiada za jeden cykl skanowania dla konkretnego wzorca. Stan procesów (cykl życia, PID) jest rejestrowany i utrzymywany w strukturach modułu \textbf{\texttt{proc\_table.c}}, co ułatwia zarządzanie i ewentualne zabijanie/restartowanie workerów.
+		\item \textbf{Opis działania:} Plik \textbf{\texttt{supervisor.c}} implementuje orkiestrację procesu nadzorczego. Na podstawie ilości argumentów powoływane są procesy robocze (workery), realizowane w pliku \textbf{\texttt{worker.c}}. Każdy z nich odpowiada za jeden cykl skanowania dla przypisanego mu wzorca. Stan procesów (cykl życia, PID) jest rejestrowany i utrzymywany w strukturach modułu \textbf{\texttt{proc\_table.c}}, co ułatwia zarządzanie i ewentualne zabijanie/restartowanie workerów.
 		\item \textbf{Kluczowe funkcje:} Funkcje monitorujące procesy potomne (\textbf{\texttt{wait}}/\textbf{\texttt{waitpid}}) oraz rozsyłające z procesu nadzorczego do workerów otrzymane sygnały (\textbf{\texttt{SIGUSR1}}/\textbf{\texttt{SIGUSR2}}).
 	\end{itemize}
 	
 	\subsection{Moduł Skanowania Systemu Plików i Raportowania (\textbf{\texttt{scanner}}, \textbf{\texttt{match}}, \textbf{\texttt{logger}})}
 	Moduł realizujący główną logikę operacji na plikach (I/O) i generowania logów.
 	\begin{itemize}
-		\item \textbf{Opis działania:} W module \textbf{\texttt{scanner.c}} zaimplementowano rekurencyjny bezpieczny traversal po systemie plików z uwzględnieniem sprawdzania praw dostępu do katalogów i plików. \textbf{\texttt{match.c}} służy jako moduł pomocniczy weryfikujący dopasowanie fragmentu nazwy pliku do zadanych wzorców z użyciem np. \textbf{\texttt{strstr}}. Wyniki tych poszukiwań są wysyłane do systemowego logu przez specjalnie przygotowane funkcje z \textbf{\texttt{logger.c}}, które filtrują logi na standardowe oraz te dla opcji wyczerpującej (\textbf{\texttt{-v}}).
+		\item \textbf{Opis działania:} W module \textbf{\texttt{scanner.c}} zaimplementowano rekurencyjny bezpieczny traversal po systemie plików z uwzględnieniem sprawdzania praw dostępu do katalogów i plików. \textbf{\texttt{match.c}} służy jako moduł pomocniczy weryfikujący dopasowanie fragmentu nazwy pliku do zadanych wzorców z użyciem np. \textbf{\texttt{strstr}}. Architektura skanera została odseparowana od logiki raportowania przy użyciu mechanizmu wskaźników na funkcje (callbacks). Dzięki temu kod przechodzący po grafie katalogów operuje niezależnie od tego, co proces roboczy ostatecznie robi ze znalezioną ścieżką. Wyniki tych poszukiwań są ostatecznie wysyłane do systemowego logu przez specjalnie przygotowane funkcje z \textbf{\texttt{logger.c}}, które filtrują logi na standardowe oraz te dla opcji wyczerpującej (\textbf{\texttt{-v}}).
 	\end{itemize}
 	
 	\subsection{Moduł Sygnałów i Usypiania (\textbf{\texttt{signals}}, \textbf{\texttt{sleep\_control}})}
 	Moduł odpowiadający za komunikację asynchroniczną i sterowanie czasem wykonania programu za pomocą sygnałów POSIX.
 	\begin{itemize}
-		\item \textbf{Opis działania:} \textbf{\texttt{signals.c}} konfiguruje handlery dla sygnałów \textbf{\texttt{SIGUSR1}} (budzenie/restart skanowania) i \textbf{\texttt{SIGUSR2}} (przerwanie skanowania i uśpienie). Zmieniają one globalne flagi kontrolne. Z kolei \textbf{\texttt{sleep\_control.c}} używa tych flag do zarządzania interwałami snu nadzorcy i jego przedwczesnym wybudzaniem.
-		\item \textbf{Kluczowe zmienne globalne:} Atomowe flagi systemowe (\textbf{\texttt{volatile sig\_atomic\_t}}), na których opiera się asynchroniczne przerywanie funkcji np. \textbf{\texttt{sleep()}}, powiadamiające demona, czy ma natychmiast przestać szukać czy zrestartować skanowanie.
+		\item \textbf{Opis działania:} \textbf{\texttt{signals.c}} konfiguruje handlery dla sygnałów \textbf{\texttt{SIGUSR1}} (budzenie/restart skanowania) i \textbf{\texttt{SIGUSR2}} (przerwanie skanowania i uśpienie). Zmieniają one globalne flagi kontrolne. Z kolei \textbf{\texttt{sleep\_control.c}} używa tych flag do zarządzania interwałami snu nadzorcy i jego przedwczesnym wybudzaniem, wykorzystując bezpieczne dla systemu przerwania funkcji \textbf{\texttt{clock\_nanosleep()}}.
+		\item \textbf{Kluczowe zmienne globalne:} Atomowe flagi systemowe (\textbf{\texttt{volatile sig\_atomic\_t}}), na których opiera się asynchroniczne przerywanie mechanizmu spania (obsługa błędu \textbf{\texttt{EINTR}}), powiadamiające demona, czy ma natychmiast przestać szukać czy zrestartować skanowanie.
 	\end{itemize}
 	
 	\section{Zrzuty ekranu działającego programu (demonstracja)}
 	
-	W celu zaprezentowania poprawności działania programu załączono następujące scenariusze:
-	
-	\begin{enumerate}
-		\item Standardowe uruchomienie z wieloma wzorcami - widok współbieżnego dopasowania plików do poszczególnych argumentów w \textbf{\texttt{/var/log/syslog}}.
-		\item Przebieg z flagą \textbf{\texttt{-v}} pokazujący zdarzenia: uśpienie, wybudzenie, sygnały i porównywanie ścieżek.
-		\item Obsługa sygnału \textbf{\texttt{SIGUSR1}} wysłanego do demona w trakcie snu (natychmiastowe obudzenie).
-		\item Obsługa sygnałów w trakcie pracy - symulacja wysłania \textbf{\texttt{SIGUSR1}} do pracującego demona w celu zrestartowania pętli, a następnie \textbf{\texttt{SIGUSR2}} w celu przerwania skanu i uśpienia całego procesu.
-	\end{enumerate}
-	
+	W celu zaprezentowania poprawności działania programu, poniżej przedstawiono kilka kluczowych scenariuszy testowych, które zostały przeprowadzone na działającym demonie poszukującym plików. Każdy z nich ilustruje różne aspekty funkcjonalności, od standardowego działania po obsługę sygnałów i trybu verbose.
+    
+    \subsection{Standardowe uruchomienie z kilkoma wzorcami}
+    Demon został wywołany z pięcioma poszukiwanymi wzorcami. Komenda \textbf{\texttt{ps u -C demonsearch}} (Rysunek \ref*{fig:ps}) potwierdza proces demonizacji i utworzenie dokładnie pięciu podprocesów powiązanych z procesem nadzorczym. Dodatkowo ujęto scenariusz pokazujący wysłanie sygnału zamknięcia (\texttt{kill}) do samego nadzorcy (supervisor), co skutkowało całkowitym wyczyszczeniem środowiska (\texttt{ps u} wykazał puste zwrócone linie), co dowodzi o bezpiecznym sprzątaniu i powiązaniu hierarchicznym procesów.
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{img1.png}
+        \caption{Lista uruchomionych procesów demona oraz weryfikacja ich kaskadowego zamknięcia po uśmierceniu nadzorcy.}
+        \label{fig:ps}
+    \end{figure}
+    Standardowe wyjście w systemowym dzienniku (Rysunek \ref*{fig:syslog}) potwierdza, że logowany jest czas, pełna ścieżka i powiązany z procesem na sztywno wzorzec (bez użycia PID'ów w treści, co eliminuje nieczytelność po restartach):
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{img2.png}
+        \caption{Zrzut wpisów z dziennika po dopasowaniu plików do wzorców.}
+        \label{fig:syslog}
+    \end{figure}
+
+    \subsection{Przebieg z flagą -v (verbose)}
+
+    \subsection{Obsługa sygnału SIGUSR1 - wybudzenie z uśpienia}
+
+    \subsection{Obsługa sygnałów podczas skanowania (restart i uśpienie)}
+
 	\section{Podział pracy}
-	
 	\begin{itemize}
 		\item \textbf{Jakub Borkowski:} Implementacja odpięcia procesu (\textbf{\texttt{daemonize}}), parsowania argumentów (\textbf{\texttt{args}}), procedury bezpiecznego i rekurencyjnego skanowania drzewa katalogów (\textbf{\texttt{scanner}}, \textbf{\texttt{match}}) oraz logowania do systemowego dziennika (\textbf{\texttt{logger}}).
 		\item \textbf{Jakub Matusiewicz:} Pisanie sprawozdania, opracowanie obsługi sygnałów \textbf{\texttt{SIGUSR1}}/\textbf{\texttt{SIGUSR2}} i flag współdzielonych (\textbf{\texttt{signals}}), implementacja procesu nadzorczego i tabeli procesów do zarządzania potomkami (\textbf{\texttt{supervisor}}, \textbf{\texttt{proc\_table}}, \textbf{\texttt{worker}}) oraz kontrola wybudzania/usypiania głównej pętli (\textbf{\texttt{sleep\_control}}).
 	\end{itemize}
 	
-	
+
 \end{document}
