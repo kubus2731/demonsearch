@@ -111,6 +111,18 @@
 	\section{Zrzuty ekranu działającego programu (demonstracja)}
 	
 	W celu zaprezentowania poprawności działania programu, poniżej przedstawiono kilka kluczowych scenariuszy testowych, które zostały przeprowadzone na działającym demonie poszukującym plików. Każdy z nich ilustruje różne aspekty funkcjonalności, od standardowego działania po obsługę sygnałów i trybu verbose.
+
+	\subsection{Walidacja argumentów i interfejs wiersza poleceń}
+    Pierwszym etapem działania aplikacji jest parsowanie argumentów przekazanych przez użytkownika. Aby zapewnić stabilność demona i zapobiec nieprzewidzianemu zachowaniu systemu na skutek nieprawidłowych danych wejściowych, zaimplementowano rygorystyczny mechanizm weryfikacji. 
+
+    Na Rysunku \ref*{fig:cli_args} zaprezentowano reakcję programu na niepoprawne wywołania. Aplikacja skutecznie wykrywa brak wymaganych wzorców wyszukiwania, brak wartości dla opcji wymagających parametru (np. czas interwału dla flagi \texttt{-i}), a także próby wielokrotnego zdefiniowania tej samej ścieżki (podwójna flaga \texttt{-d}). W każdym z tych przypadków program bezpiecznie przerywa działanie, wyświetlając komunikat błędu oraz wskazówkę dotyczącą użycia flagi pomocy (\texttt{-h}), która prezentuje pełną instrukcję obsługi.
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{img0.png}
+        \caption{Zrzut ekranu przedstawiający obsługę błędnych argumentów oraz pełny interfejs pomocy demona.}
+        \label{fig:cli_args}
+    \end{figure}
     
     \subsection{Standardowe uruchomienie z kilkoma wzorcami}
     Demon został wywołany z pięcioma poszukiwanymi wzorcami. Komenda \textbf{\texttt{ps u -C demonsearch}} (Rysunek \ref*{fig:ps}) potwierdza proces demonizacji i utworzenie dokładnie pięciu podprocesów powiązanych z procesem nadzorczym. Dodatkowo ujęto scenariusz pokazujący wysłanie sygnału zamknięcia (\texttt{kill}) do samego nadzorcy (supervisor), co skutkowało całkowitym wyczyszczeniem środowiska (\texttt{ps u} wykazał puste zwrócone linie), co dowodzi o bezpiecznym sprzątaniu i powiązaniu hierarchicznym procesów.
@@ -131,17 +143,69 @@
         \label{fig:syslog}
     \end{figure}
 
-    \subsection{Przebieg z flagą -v (verbose)}
+\subsection{Szczegółowe monitorowanie skanowania z flagą -v (verbose)}
+    Uruchomienie programu z opcją \texttt{-v} wymusza logowanie wyczerpujących informacji o każdym kroku wykonywanym przez demona, w tym o procesie analizy plików. Zrzut ekranu (Rysunek \ref*{fig:verbose_cmd}) ilustruje przykładowe polecenie testowe uruchamiające skanowanie wybranych wzorców z włączonym trybem \textit{verbose}.
 
-    \subsection{Obsługa sygnału SIGUSR1 - wybudzenie z uśpienia}
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{img3.png}
+        \caption{Terminal pokazujący uruchomienie testowe programu demonsearch z włączoną flagą verbose.}
+        \label{fig:verbose_cmd}
+    \end{figure}
 
-    \subsection{Obsługa sygnałów podczas skanowania (restart i uśpienie)}
+    Potwierdzeniem prawidłowego działania tego trybu są wpisy w dzienniku systemowym. Jak widać na Rysunku \ref*{fig:verbose_logs}, tryb \textit{verbose} generuje ogromną ilość logów dla zdarzenia skanowania. Widoczny jest moment startu procesu (event=\texttt{start}), rozpoczęcia przeszukiwania, a przede wszystkim logi typu \texttt{compare} informujące o ewaluacji każdej pojedynczej napotkanej ścieżki (z wynikiem \texttt{matched=true/false}). Dopiero po całkowitym przeanalizowaniu drzewa plików, worker loguje przejście w stan uśpienia (event=\texttt{state\_change}, state=\texttt{sleeping}).
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{img4.png}
+        \caption{Wyjście z logu systemowego demonstrujące wyczerpujące operacje workera (logi \texttt{compare}) wymuszone przez tryb verbose.}
+        \label{fig:verbose_logs}
+    \end{figure}
+
+    \subsection{Wymuszone zatrzymanie pojedynczego procesu roboczego}
+    Architektura demona zakłada niezależne i współbieżne działanie procesów potomnych. Aby zweryfikować poprawność zarządzania cyklem życia workerów oraz reakcję nadzorcy na niespodziewaną utratę procesu, przeprowadzono test polegający na ręcznym wysłaniu sygnału zakończenia do jednego z nich.\\[0.1cm]
+    
+    Na Rysunku \ref*{fig:kill_cmd} zaprezentowano stan procesów przed i po wykonaniu polecenia \texttt{kill}. Po wysłaniu domyślnego sygnału zamknięcia do wybranego workera (w tym przypadku PID 970338), znika on z listy aktywnych procesów, podczas gdy nadzorca i pozostałe procesy potomne nieprzerwanie kontynuują swoją pracę.
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{img5.png}
+        \caption{Zrzut terminala ukazujący listę procesów demona przed i po ręcznym wyłączeniu pojedynczego workera.}
+        \label{fig:kill_cmd}
+    \end{figure}
+
+    Faktyczną mechanikę tego zdarzenia można zaobserwować w logach aplikacji (Rysunek \ref*{fig:kill_log}). Wybrany worker przechwytuje sygnał 15 (\texttt{SIGTERM}) i wykonuje procedurę bezpiecznego wyłączenia, zwalniając przydzieloną pamięć (event=\texttt{shutdown}). Jednocześnie proces główny (nadzorca) natychmiast dowiaduje się o śmierci swojego potomka za sprawą sygnału 17 (\texttt{SIGCHLD}) wysłanego przez jądro systemu. Nadzorca prawidłowo obsługuje to przerwanie — aktualizuje swoją wewnętrzną tablicę procesów (\texttt{proc\_table}) i odnotowuje zaktualizowaną liczbę aktywnych workerów (\texttt{remaining\_workers=2}).
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{img6.png}
+        \caption{Zapis z dziennika systemowego rejestrujący wymuszone zamknięcie workera (sygnał 15) oraz asynchroniczną reakcję nadzorcy (sygnał 17).}
+        \label{fig:kill_log}
+    \end{figure}
+
+	\subsection{Asynchroniczna zmiana stanów i przerywanie skanowania (w locie)}
+    Kolejnym testem weryfikującym poprawność wielobieżnej architektury demona było sprawdzenie jego reakcji na sekwencję sprzecznych poleceń. Celem było upewnienie się, że procesy robocze nie ignorują sygnałów, gdy są zajęte operacjami wejścia/wyjścia (I/O). Na Rysunku \ref*{fig:state_change_cmd} przedstawiono ciąg poleceń powłoki. Za pomocą narzędzia \texttt{pgrep} pobrano identyfikator nadzorcy, a następnie wysłano do niego w sekundowych odstępach sygnał uśpienia (12~--~\texttt{SIGUSR2}), sygnał wybudzenia/skanowania (10~--~\texttt{SIGUSR1}) oraz ponownie sygnał uśpienia (12). Test zakończono komendą \texttt{killall}.
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{img7.png}
+        \caption{Zrzut terminala z poleceniami wysyłającymi ręczną sekwencję sygnałów sterujących.}
+        \label{fig:state_change_cmd}
+    \end{figure}
+
+    Analiza wygenerowanego dziennika (Rysunek \ref*{fig:state_change_log}) udowadnia poprawne działanie systemu. Nadzorca prawidłowo przekazał sygnały do workerów (event=\texttt{signal\_forward}). Kluczowym zachowaniem jest zarejestrowany wpis event=\texttt{scan\_interrupted}. Potwierdza on, że po wysłaniu sygnału \texttt{SIGUSR2} proces roboczy nie oczekiwał na całkowite zakończenie przeszukiwania dysku, lecz bezpiecznie je przerwał, przechodząc w stan uśpienia (event=\texttt{state\_change}, state=\texttt{sleeping}). Następujący bezpośrednio po nim sygnał wybudzenia prawidłowo wywołał zdarzenie \texttt{wakeup} i wznowił procedurę, po czym proces reagował na kolejne przerwania bez zawieszania się.
+
+    \begin{figure}[H]
+        \centering
+        \includegraphics[width=\textwidth]{img8.png}
+        \caption{Zapis dziennika pokazujący asynchroniczne przerywanie trwającego skanowania oraz płynne zmiany stanów wywołane poleceniami użytkownika.}
+        \label{fig:state_change_log}
+    \end{figure}
 
 	\section{Podział pracy}
 	\begin{itemize}
 		\item \textbf{Jakub Borkowski:} Implementacja odpięcia procesu (\textbf{\texttt{daemonize}}), parsowania argumentów (\textbf{\texttt{args}}), procedury bezpiecznego i rekurencyjnego skanowania drzewa katalogów (\textbf{\texttt{scanner}}, \textbf{\texttt{match}}) oraz logowania do systemowego dziennika (\textbf{\texttt{logger}}).
 		\item \textbf{Jakub Matusiewicz:} Pisanie sprawozdania, opracowanie obsługi sygnałów \textbf{\texttt{SIGUSR1}}/\textbf{\texttt{SIGUSR2}} i flag współdzielonych (\textbf{\texttt{signals}}), implementacja procesu nadzorczego i tabeli procesów do zarządzania potomkami (\textbf{\texttt{supervisor}}, \textbf{\texttt{proc\_table}}, \textbf{\texttt{worker}}) oraz kontrola wybudzania/usypiania głównej pętli (\textbf{\texttt{sleep\_control}}).
 	\end{itemize}
-	
 
 \end{document}
