@@ -12,6 +12,10 @@
 #include <signal.h>
 #include <stddef.h>
 
+/* Zmienne globalne */
+static int g_pid_fd = -1;  /* Deskryptor pliku PID */
+static char *g_pid_file = NULL; /* Ścieżka do pliku PID */
+
 /* Powiadamia przez potok rodzica o statusie demonizacji i zamyka deskryptor. */
 static void notify_parent_and_close(int fd, char status)
 {
@@ -56,6 +60,20 @@ static int create_and_lock_pidfile(const char *pid_file)
     }
 
     return fd;
+}
+
+/* Czyści zasoby związane z plikiem PID. */
+static void cleanup_pidfile(void)
+{
+    if (g_pid_fd >= 0) {
+        close(g_pid_fd);
+        g_pid_fd = -1;
+    }
+    if (g_pid_file) {
+        unlink(g_pid_file); /* Usunięcie pliku PID przy zamykaniu procesu. */
+        free(g_pid_file);
+        g_pid_file = NULL;
+    }
 }
 
 int ds_daemonize(const ds_daemon_config_t *config)
@@ -185,8 +203,18 @@ int ds_daemonize(const ds_daemon_config_t *config)
         }
     }
 
-    /* Sygnał przez potok zwalnia blokadę pierwotnego procesu rodzica, informując go o sukcesie demonizacji. */
+    /* Sygnał przez potok zwalnia blokadę pierwotnego procesu 
+       rodzica, informując go o sukcesie demonizacji. */
     notify_parent_and_close(status_pipe[1], '1');
+
+    if (pid_fd >= 0 && config->pid_file != NULL) {
+        g_pid_fd = pid_fd;
+        g_pid_file = strdup(config->pid_file);
+
+        /* Rejestracja funkcji sprzątającej, która usunie 
+           plik PID przy normalnym zakończeniu procesu. */
+        atexit(cleanup_pidfile);
+    }
 
     /* Dziecko kontynuuje działanie jako demon. */
     return 0;

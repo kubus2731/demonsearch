@@ -39,9 +39,6 @@ int main(int argc, char *argv[])
     }
     target_dir = resolved_dir;
 
-    /* Inicjalizacja loggera. */
-    ds_logger_init("demonsearch", args.verbose);
-
     /* Konfiguracja demona. */
     daemon_cfg.close_stdio = true;
     daemon_cfg.keep_cwd = false; 
@@ -49,11 +46,15 @@ int main(int argc, char *argv[])
 
     /* Demonizacja procesu. Od tego momentu proces działa w tle. */
     if (ds_daemonize(&daemon_cfg) < 0) {
-		ds_log_error("component=supervisor event=daemonize_failed reason=instance_lock_or_runtime_error");
+		fprintf(stderr, "Error: Daemonization failed.\n");
         ds_args_free(&args);
         ds_logger_close();
         return EXIT_FAILURE;
     }
+
+    /* Inicjalizacja loggera. */
+    ds_logger_init("demonsearch", args.verbose);
+
 	ds_log_verbose_info("component=supervisor event=start target_dir=\"%s\" worker_count=%zu", target_dir, args.pattern_count);
 
     /* Inicjalizacja tabeli procesów potrzebnej 
